@@ -1,5 +1,4 @@
-""" The Edge class can be used to determining the crack tip position of 
-a fracture simulation. 
+""" This script was written to analyze chunk-averaged data.
 """
 
 import numpy as np
@@ -11,8 +10,9 @@ plt.rcParams["font.family"] = "Serif"   # Font
 plt.rcParams.update({'figure.max_open_warning': 0})
 
 class Edge:
-    def __init__(self, filename, threshold=0.001, window=1):
+    def __init__(self, filename):
         # Declare lists
+        self.filename = filename
         self.chunk_list_tot = []
         self.pos_list_tot = []
         self.num_atoms_tot = []
@@ -20,7 +20,8 @@ class Edge:
         self.crack_tips = []
         self.timesteps = []
         
-        self.find_crack_tip(filename, threshold, window)
+        #self.find_crack_tip(filename, threshold, window)
+        self.read_data(filename)
 
     def find_crack_tip(self, filename, threshold, window):
         """Determine the crack tip position and speed
@@ -29,7 +30,7 @@ class Edge:
         
         pad_size = (window - 1) // 2
         
-        with open(filename, "r") as f:
+        with open(self.filename, "r") as f:
             
             # Declare integers
             current_timestep=0
@@ -90,6 +91,63 @@ class Edge:
         self.edge_fraction = self.edge_fraction_tot
         self.timesteps = self.timesteps
         self.pos_list = self.pos_list_tot
+        
+    def read_data(self, filename):
+        """Read chunk-averaged file. 
+        
+        Assumptions:
+        The file starts with three comment lines. The first line is some 
+        general information. The second line contains global information. 
+        The third line contains local information. 
+        """
+        
+        with open(filename, "r") as f:
+        
+            line1 = f.readline()
+            line2 = f.readline()
+            line3 = f.readline()
+            
+            self.global_labels = line2.split()[1:]
+            self.local_labels = line3.split()[1:]
+            
+            global_list = []
+            local_list = []
+            
+            for line in f.readlines():
+                splitted = line.split()
+                #print(splitted)
+                if line[0].isdigit():
+                    # global
+                    global_list.append(splitted)
+                    local_list.append([])
+                    
+                elif line.startswith(" "):
+                    # local
+                    local_list[-1].append(splitted)
+                    
+                else:
+                    raise TypeError("???")
+            
+        self.global_list = np.array(global_list, dtype=float).transpose(1,0)
+        self.local_list = np.array(local_list, dtype=float).transpose(0,2,1)
+        
+    def get_variables(self):
+        return self.local_labels
+        
+    def get_local(self):
+        return self.global_list
+        
+    def find(self, key, step=0):
+        """Returns the ...
+        """
+        array = None
+        for i, variable in enumerate(self.local_labels):
+            if variable == key:
+                array = self.local_list[step][i]
+        if array is None:
+            raise KeyError("No category named {} found.".format(key))
+        else:
+            return np.array(array)
         
     @staticmethod
     def average(arr, window):
