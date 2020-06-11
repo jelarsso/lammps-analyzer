@@ -52,15 +52,15 @@ class ChunkAvg:
         self.global_list = np.array(global_list, dtype=float).transpose(1,0)
         self.local_list = [np.array(i, dtype=float).transpose(1,0) for i in local_list]
         
-    def local_labels(self):
-        """Get an overview of all the local labels
-        """
-        return self.local_labels
-        
     def global_labels(self):
         """Get an overview of all the global labels
         """
         return self.global_labels
+        
+    def local_labels(self):
+        """Get an overview of all the local labels
+        """
+        return self.local_labels
         
     def find_global(self, key):
         """Returns the ...
@@ -128,14 +128,14 @@ class ChunkAvg:
         pad_size = (window - 1) // 2
         
         self.timesteps = self.find_global("Timestep")
-        cracktip = np.zeros_like(timesteps)
+        cracktip = np.zeros_like(self.timesteps)
         
         self.positions_list = []
         self.edgeatoms_list = []
         
-        for i, timestep in enumerate(timesteps):
+        for i, timestep in enumerate(self.timesteps):
             positions = self.find_local("Coord1", step=i)
-            edgeatoms = self.find_local("v_edgeatoms", step=i)
+            edgeatoms = self.find_local("v_edgeatom", step=i)
             edgeatoms = self.pooling1d(edgeatoms, window=window, pad_size=pad_size, mode='min')
             
             self.positions_list.append(positions)
@@ -151,43 +151,25 @@ class ChunkAvg:
         return cracktip
 
     def plot_edge_fraction(self, plot_every=np.inf, show=False, save=False, ignore_first=5, ignore_last=10):
-        from tqdm import trange
-        for i in trange(len(self.edge_fraction)):
-            edge_fraction = np.array(self.edge_fraction[i], dtype=float)
-            pos_list = np.array(self.pos_list[i], dtype=float)
-            current_timestep = int(self.timesteps[i])
-            crack_tip = self.crack_tips[i]
-            if i % plot_every == 0:
-                # Plot 
-                plt.figure()
-                plt.plot(pos_list[ignore_first:-ignore_last], edge_fraction[ignore_first:-ignore_last])
-                plt.title(f"Timestep: {current_timestep}", **label_size)
-                plt.axvline(crack_tip, linestyle="--", color="r")
-                plt.xlabel("Block position in x-direction", **label_size)
-                plt.ylabel("Fraction of edge atoms", **label_size)
-                if save is not False:
-                    plt.savefig(save + f"edge_fraction_{current_timestep}.png")
-                if show is not False:
-                    plt.show()
-        
-    
-        
-    def plot_tip_position(self, ignore_first=5):
-        plt.figure()
-        plt.plot(self.timesteps[ignore_first:], self.crack_tips[ignore_first:])
-        plt.title("Crack tip motion in x-direction")
-        plt.xlabel("Time")
-        plt.ylabel("Position")
-        plt.savefig("../fig/crack_tip_position.png")
-        plt.plot()
-
-    def plot_tip_speed(self, ignore_first=5):
-        plt.figure()
-        plt.plot(self.timesteps[ignore_first+1:], np.diff(self.crack_tips[ignore_first:]))
-        plt.xlabel("Time")
-        plt.ylabel("Speed")
-        plt.savefig("../fig/crack_tip_speed.png")
-        plt.plot()
+        """Given a chunk average file with the number of atoms of coordination number 1, 
+        this function plots the edge fraction at a given timestep.
+        """
+        edge_fraction = np.array(self.edge_fraction[i], dtype=float)
+        pos_list = np.array(self.pos_list[i], dtype=float)
+        current_timestep = int(self.timesteps[i])
+        crack_tip = self.crack_tips[i]
+        if i % plot_every == 0:
+            # Plot 
+            plt.figure()
+            plt.plot(pos_list[ignore_first:-ignore_last], edge_fraction[ignore_first:-ignore_last])
+            plt.title(f"Timestep: {current_timestep}", **label_size)
+            plt.axvline(crack_tip, linestyle="--", color="r")
+            plt.xlabel("Block position in x-direction", **label_size)
+            plt.ylabel("Fraction of edge atoms", **label_size)
+            if save is not False:
+                plt.savefig(save + f"edge_fraction_{current_timestep}.png")
+            if show is not False:
+                plt.show()
         
     
 if __name__ == "__main__":
