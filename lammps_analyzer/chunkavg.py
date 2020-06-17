@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 label_size = {"size":14}                # Dictionary with size
-plt.style.use("bmh")                    # Beautiful plots
+#plt.style.use("bmh")                    # Beautiful plots
 plt.rcParams["font.family"] = "Serif"   # Font
 plt.rcParams.update({'figure.max_open_warning': 0})
 
@@ -120,83 +120,52 @@ class ChunkAvg:
         else:
             raise NotImplementedError("Mode {} is not implemented".format(mode))
             
-    def find_crack_tip(self, threshold, window):
-        """Determine the crack tip position and speed
-        using the number of edge atoms and a threshold.
+    def find_crack_tip(self, step, threshold, window):
+        """Cracktip at time step 
         """
         
         pad_size = (window - 1) // 2
         
-        self.timesteps = self.find_global("Timestep")
-        cracktip = np.zeros_like(self.timesteps)
+        positions = self.find_local("Coord1", step=step)
+        edgeatoms = self.find_local("v_edgeatom", step=step)
+        edgeatoms = self.pooling1d(edgeatoms, window=window, pad_size=pad_size, mode='min')
         
-        self.positions_list = []
-        self.edgeatoms_list = []
+        # Find crack tip
+        crackbin = (edgeatoms[:-10]>threshold).nonzero()[0][-1] + pad_size
+        cracktip = positions[crackbin]
+        return cracktip
+            
+    def find_crack_tips(self, threshold, window):
+        """Determine the crack tip position and speed
+        using the number of edge atoms and a threshold.
+        """
         
-        for i, timestep in enumerate(self.timesteps):
-            positions = self.find_local("Coord1", step=i)
-            edgeatoms = self.find_local("v_edgeatom", step=i)
-            edgeatoms = self.pooling1d(edgeatoms, window=window, pad_size=pad_size, mode='min')
-            
-            self.positions_list.append(positions)
-            self.edgeatoms_list.append(edgeatoms)
-            
-            # Find crack tip
-            try:
-                crackbin = (edgeatoms[:-10]>threshold).nonzero()[0][-1] + pad_size
-                cracktip[i] = positions[crackbin]
-            except:
-                pass
+        timesteps = self.find_global("Timestep")
+        cracktip = np.zeros_like(timesteps)
+        
+        for i in range(len(timesteps)):
+            cracktip[i] = self.find_crack_tip(i, threshold, window)
         
         return cracktip
 
-    def plot_edge_fraction(self, plot_every=np.inf, show=False, save=False, ignore_first=5, ignore_last=10):
+    def plot_edge_fraction(self, step=0, show=False, save=False, ignore_first=5, ignore_last=10, threshold=0.004, window=1):
         """Given a chunk average file with the number of atoms of coordination number 1, 
         this function plots the edge fraction at a given timestep.
         """
-        edge_fraction = np.array(self.edge_fraction[i], dtype=float)
-        pos_list = np.array(self.pos_list[i], dtype=float)
-        current_timestep = int(self.timesteps[i])
-        crack_tip = self.crack_tips[i]
-        if i % plot_every == 0:
-            # Plot 
-            plt.figure()
-            plt.plot(pos_list[ignore_first:-ignore_last], edge_fraction[ignore_first:-ignore_last])
-            plt.title(f"Timestep: {current_timestep}", **label_size)
-            plt.axvline(crack_tip, linestyle="--", color="r")
-            plt.xlabel("Block position in x-direction", **label_size)
-            plt.ylabel("Fraction of edge atoms", **label_size)
-            if save is not False:
-                plt.savefig(save + f"edge_fraction_{current_timestep}.png")
-            if show is not False:
-                plt.show()
+        edgeatoms = self.find_local("v_edgeatom", step=step)
+        positions = self.find_local("Coord1", step=step)
+        timesteps = self.find_global("Timestep")
+        current_timestep = int(timesteps[step])
         
-    
-if __name__ == "__main__":
-    density = Edge("../data/stretch3_wedgeBeta_notch_defects_576000/edge_density.data", threshold=0.001, window=7)
-    density.plot_edge_fraction()
-    crack_tip = density.crack_tips
-    timesteps = density.timesteps
-    
-    dt = 0.002
-    
-    crack_tip50 = density.average(crack_tip, 50)
-    speed200 = density.average(np.diff(crack_tip, prepend=10), 200) * 100
-    timesteps50 = density.average(timesteps, 50)
-    timesteps200 = density.average(timesteps, 200)
-    
-    time50 = timesteps50 * dt
-    time200 = timesteps200 * dt
-    
-    plt.figure()
-    #plt.subplot(2,1,1)
-    plt.plot(time50, crack_tip50)
-    plt.xlabel("Time [ps]")
-    plt.ylabel("Position [Å]")
-    
-    plt.figure()
-    #plt.subplot(2,1,2)
-    plt.plot(time200, speed200)
-    plt.xlabel("Time [ps]")
-    plt.ylabel("Speed [m/s]")
-    plt.show()
+        cracktip = self.find_crack_tip(step, threshold, window)
+
+        plt.figure()
+        plt.plot(positions[ignore_first:-ignore_last], edgeatoms[ignore_first:-ignore_last])
+        plt.title(f"Timestep: {current_timestep}", **label_size)
+        plt.axvline(cracktip, linestyle="--", color="r")
+        plt.xlabel("Position in x-direction", **label_size)
+        plt.ylabel("Fraction of surface atoms", **label_size)
+        if save is not False:
+            plt.savefig(save + f"edge_fraction_{current_timestep}.png")
+        if show is not False:
+            plt.show()
