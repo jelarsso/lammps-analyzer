@@ -131,7 +131,7 @@ class ChunkAvg:
         edgeatoms = self.pooling1d(edgeatoms, window=window, pad_size=pad_size, mode='min')
         
         # Find crack tip
-        crackbin = (edgeatoms>threshold).nonzero()[0][-1] + pad_size
+        crackbin = (edgeatoms>threshold).nonzero()[0][-1]
         cracktip = positions[crackbin]
         return cracktip
             
