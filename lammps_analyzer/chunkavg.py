@@ -120,22 +120,22 @@ class ChunkAvg:
         else:
             raise NotImplementedError("Mode {} is not implemented".format(mode))
             
-    def find_crack_tip(self, step, threshold, window):
+    def find_crack_tip(self, step, threshold, window, ignore_last):
         """Cracktip at time step 
         """
         
         pad_size = (window - 1) // 2
         
-        positions = self.find_local("Coord1", step=step)
-        edgeatoms = self.find_local("v_edgeatom", step=step)
+        positions = self.find_local("Coord1", step=step)[:-ignore_last]
+        edgeatoms = self.find_local("v_edgeatom", step=step)[:-ignore_last]
         edgeatoms = self.pooling1d(edgeatoms, window=window, pad_size=pad_size, mode='min')
         
         # Find crack tip
-        crackbin = (edgeatoms[:-10]>threshold).nonzero()[0][-1] + pad_size
+        crackbin = (edgeatoms>threshold).nonzero()[0][-1] + pad_size
         cracktip = positions[crackbin]
         return cracktip
             
-    def find_crack_tips(self, threshold, window):
+    def find_crack_tips(self, threshold, window, ignore_last=1):
         """Determine the crack tip position and speed
         using the number of edge atoms and a threshold.
         """
@@ -144,7 +144,7 @@ class ChunkAvg:
         cracktip = np.zeros_like(timesteps)
         
         for i in range(len(timesteps)):
-            cracktip[i] = self.find_crack_tip(i, threshold, window)
+            cracktip[i] = self.find_crack_tip(i, threshold, window, ignore_last)
         
         return cracktip
 
@@ -157,7 +157,7 @@ class ChunkAvg:
         timesteps = self.find_global("Timestep")
         current_timestep = int(timesteps[step])
         
-        cracktip = self.find_crack_tip(step, threshold, window)
+        cracktip = self.find_crack_tip(step, threshold, window, ignore_last)
 
         plt.figure()
         plt.plot(positions[ignore_first:-ignore_last], edgeatoms[ignore_first:-ignore_last])
