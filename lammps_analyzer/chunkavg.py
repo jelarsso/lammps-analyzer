@@ -120,6 +120,19 @@ class ChunkAvg:
         else:
             raise NotImplementedError("Mode {} is not implemented".format(mode))
             
+    @staticmethod
+    def reg(x, y, n):
+        """Regression, finding coefficients beta
+        """
+        
+        xb = np.c_[np.ones((len(x),1))]
+        for i in range(1,n+1):
+            xb = np.c_[xb, x**i]
+
+        beta = np.linalg.inv(xb.T.dot(xb)).dot(xb.T).dot(y)
+        return beta.flatten()[::-1]
+
+            
     def find_crack_tip(self, step, threshold, window, ignore_last):
         """Cracktip at time step 
         """
@@ -140,15 +153,46 @@ class ChunkAvg:
         using the number of edge atoms and a threshold.
         """
         
-        timesteps = self.find_global("Timestep")
-        cracktip = np.zeros_like(timesteps)
+        self.timesteps = self.find_global("Timestep")
+        self.cracktip = np.zeros_like(self.timesteps)
         
-        for i in range(len(timesteps)):
-            cracktip[i] = self.find_crack_tip(i, threshold, window, ignore_last)
+        for i in range(len(self.timesteps)):
+            self.cracktip[i] = self.find_crack_tip(i, threshold, window, ignore_last)
         
-        return cracktip
+        return self.cracktip
+        
+    def estimate_crack_speed(self, ignore_first=0, ignore_last=0, length_threshold=0.95):
+        """Estimate average crack speed. If the crack propagates through
+        the entire sample, the end time is when the crack has reached the
+        end of the sample. The speed is returned in units Å/timestep
+        """
+        
+        end_index = len(self.timesteps) - 1 #ignore_last
+        positions = self.find_local("Coord1", step=0)
+        length_sample = positions[len(positions) - ignore_last - 1]
+            
+        #try:
+        #    g = self.cracktip[0]
+        #else:
+        #    raise ValueError("find_crack_tips needs to be run before this function")
+            
+        start_time = self.timesteps[ignore_first]
+        end_time = self.timesteps[end_index]
+        
+        start_pos = self.cracktip[ignore_first]
+        end_pos = self.cracktip[end_index]
+        
+        end = length_sample * length_threshold
 
-    def plot_edge_fraction(self, step=0, show=False, save=False, ignore_first=5, ignore_last=10, threshold=0.004, window=1):
+        if end_pos > end:
+            end_index = np.searchsorted(self.cracktip, end) + 1
+            end_time = self.timesteps[end_index]
+
+        speed = (end_pos - start_pos) / (end_time - start_time)
+        return speed
+        
+
+    def plot_edge_fraction(self, step=0, show=False, save=False, ignore_first=3, ignore_last=10, threshold=0.004, window=1):
         """Given a chunk average file with the number of atoms of coordination number 1, 
         this function plots the edge fraction at a given timestep.
         """
