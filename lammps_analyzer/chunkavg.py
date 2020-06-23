@@ -2,12 +2,6 @@
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
-
-label_size = {"size":14}                # Dictionary with size
-#plt.style.use("bmh")                    # Beautiful plots
-plt.rcParams["font.family"] = "Serif"   # Font
-plt.rcParams.update({'figure.max_open_warning': 0})
 
 class ChunkAvg:
     
@@ -86,62 +80,16 @@ class ChunkAvg:
         else:
             return np.array(array)
             
-    @staticmethod
-    def average(arr, window):
-        """Average an array arr over a certain window size
-        """
-        remainder = len(arr) % window
-        avg = np.mean(arr[:-remainder].reshape(-1, window), axis=1)
-        return avg
-        
-    @staticmethod
-    def pooling1d(arr, window, pad_size=0, stride=1, mode='min'):
-        """Perform 1d pooling on an array arr
-        """
-        # Padding
-        if mode == 'min':
-            A = np.full(len(arr) + 2 * pad_size, np.inf)
-        elif mode == 'max':
-            A = np.full(len(arr) + 2 * pad_size, -np.inf)
-        A[pad_size:len(arr) + pad_size] = arr
-        
-        # Window view of data
-        from numpy.lib.stride_tricks import as_strided
-        output_shape = ((len(A) - window)//stride + 1,)
-        A_w = as_strided(A, shape = output_shape + (window,), 
-                            strides = (stride*A.strides) + A.strides)
-        
-        if mode == 'max':
-            return A_w.max(axis=1)
-        elif mode == 'min':
-            return A_w.min(axis=1)
-        elif mode == 'avg' or mode == 'mean':
-            return A_w.mean(axis=1)
-        else:
-            raise NotImplementedError("Mode {} is not implemented".format(mode))
-            
-    @staticmethod
-    def reg(x, y, n):
-        """Regression, finding coefficients beta
-        """
-        
-        xb = np.c_[np.ones((len(x),1))]
-        for i in range(1,n+1):
-            xb = np.c_[xb, x**i]
-
-        beta = np.linalg.inv(xb.T.dot(xb)).dot(xb.T).dot(y)
-        return beta.flatten()[::-1]
-
-            
     def find_crack_tip(self, step, threshold, window, ignore_last):
         """Cracktip at time step 
         """
+        from . import pooling1d
         
         pad_size = (window - 1) // 2
         
         positions = self.find_local("Coord1", step=step)[:-ignore_last]
         edgeatoms = self.find_local("v_edgeatom", step=step)[:-ignore_last]
-        edgeatoms = self.pooling1d(edgeatoms, window=window, pad_size=pad_size, mode='min')
+        edgeatoms = pooling1d(edgeatoms, window=window, pad_size=pad_size, mode='min')
         
         # Find crack tip
         crackbin = (edgeatoms>threshold).nonzero()[0][-1]
@@ -203,6 +151,12 @@ class ChunkAvg:
         
         cracktip = self.find_crack_tip(step, threshold, window, ignore_last)
 
+        import matplotlib.pyplot as plt
+
+        label_size = {"size":14}                # Dictionary with size
+        #plt.style.use("bmh")                    # Beautiful plots
+        plt.rcParams["font.family"] = "Serif"   # Font
+        plt.rcParams.update({'figure.max_open_warning': 0})
         plt.figure()
         plt.plot(positions[ignore_first:-ignore_last], edgeatoms[ignore_first:-ignore_last])
         plt.title(f"Timestep: {current_timestep}", **label_size)
