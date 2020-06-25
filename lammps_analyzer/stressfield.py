@@ -4,10 +4,12 @@ import matplotlib.pyplot as plt
 
 class Stressfield():
 
+    """
+    Class for reading chunkavg files of the stressfield sigma_ij from LAMMPS.
+    """
 
 
     def __init__(self, filename):
-
         self.data = ChunkAvg(filename)
         self.component_ordering = {"xx":1, "yy":2, "zz":3, "xy":4} #mapping between the index of the tensor array and component
 
@@ -46,7 +48,7 @@ class Stressfield():
         mesh_XX,mesh_YY,nbins_X,nbins_Y = self._get_axes(step=step)
         component_index = self.component_ordering[component]
 
-        stressfield = self.data.find_local(f"c_peratom[{str(component_index)}]",step=step)
+        stressfield = self.data.find_local(f"c_stressperatom[{str(component_index)}]",step=step)
         stressfield = np.resize(stressfield,(nbins_X,nbins_Y))
         
         self.stress = (mesh_XX,mesh_YY,stressfield,nbins_X,nbins_Y,component,step)
