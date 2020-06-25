@@ -1,2 +1,2 @@
-# lammps-analyzer
-Some tools for for analyzing LAMMPS log files and dump files
+# LAMMPS analyzing tools
+Tools for analyzing LAMMPS output files (log files, dump files and chunkavg files). 
