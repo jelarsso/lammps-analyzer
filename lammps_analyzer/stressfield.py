@@ -47,7 +47,7 @@ class Stressfield():
         mesh_XX,mesh_YY,nbins_X,nbins_Y = self._get_axes(step=0)
 
         self.timesteps = self.data.find_global("Timestep")
-        self.stressfields = np.zeros((timesteps.size,nbins_X,nbins_Y))
+        self.stressfields = np.zeros((self.timesteps.size,nbins_X,nbins_Y))
 
         for t in range(self.timesteps):
             self.stressfields[t] = self.create_stressfield(step=t,component=component)
