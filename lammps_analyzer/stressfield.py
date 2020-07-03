@@ -1,6 +1,8 @@
-from lammps_analyzer.chunkavg import ChunkAvg
+from lammps_analyzer.chunkavg import ChunkAvg,ChunkAvgMemSave
 import numpy as np
 import matplotlib.pyplot as plt
+from IPython import embed
+
 
 class Stressfield():
 
@@ -10,7 +12,7 @@ class Stressfield():
 
 
     def __init__(self, filename):
-        self.data = ChunkAvg(filename)
+        self.data = ChunkAvgMemSave(filename)
         self.component_ordering = {"xx":1, "yy":2, "zz":3, "xy":4} #mapping between the index of the tensor array and component
 
     
@@ -49,7 +51,7 @@ class Stressfield():
         self.timesteps = self.data.find_global("Timestep")
         self.stressfields = np.zeros((self.timesteps.size,nbins_X,nbins_Y))
 
-        for t in range(self.timesteps):
+        for t in range(self.timesteps.size):
             self.stressfields[t] = self.create_stressfield(step=t,component=component)
         
         return mesh_XX,mesh_YY,self.timesteps, self.stressfields
@@ -113,26 +115,41 @@ class Stressfield():
             plt.savefig(save)
         if show:
             plt.show()
-        
+        plt.clf()
     
-    def avg_tip(self,edge_density,window_stress=10,component="xy"):
+    def avg_tip(self,edge_density,window_time=None,window_space=10,component="xy"):
         """
         Create the average around the cracktip
+        edge_density: needs to be an instance of ChunkAvg for finding the cracktip
+        window_time: tuple of two timesteps of where to start and end the average
+        window_space: the resulting average around the cracktip is this value long in each direction
+        component: which component of the stress tensor to average
         """
         
-        cracktip_positions = edge_density.data.find_crack_tips(threshold=0.004,window=1,ignore_last=100)
+        cracktip_positions = edge_density.find_crack_tips(threshold=0.004,window=1,ignore_last=20)
+        cracktip_timesteps = edge_density.find_global("Timestep")
+        
 
-        mesh_XX, mesh_YY, timesteps, stressfields = self.create_stressfields(component=component)
-
+        mesh_XX, mesh_YY, stress_timesteps, stressfields = self.create_stressfields(component=component)
+        if window_time is None:
+            window_time = (np.min(stress_timesteps),np.max(stress_timesteps))
+        
         xaxis = mesh_XX[:,0]
 
-        stress_avg = np.zeros((2*window_stress,mesh_YY[0,:].size))
+        if cracktip_timesteps.size > stress_timesteps.size:
+            factor = int(cracktip_timesteps.size // stress_timesteps.size)
+            cracktip_positions = cracktip_positions[::factor]    
+            cracktip_timesteps = cracktip_timesteps[::factor]
+            indexoffset = int(np.where(cracktip_timesteps==stress_timesteps[0])[0])
 
-        for t,cracktip in enumerate(cracktip_positions):
-            xindice = np.argmin(np.abs(xaxis-cracktip))
-            stress_avg += stressfields[t,(xindice-window_stress):(xindice+window_stress),:]
+        tindices = np.argwhere(np.logical_and(cracktip_timesteps>window_time[0] , cracktip_timesteps<window_time[1]))
+        stress_avg = np.zeros((2*window_space,mesh_YY[0,:].size))
         
-        return stress_avg/cracktip_positions.size
+        for tindex in tindices:
+            xindice = np.argmin(np.abs(xaxis-cracktip_positions[tindex]))
+            stress_avg += stressfields[tindex[0]-indexoffset,(xindice-window_space):(xindice+window_space),:]
+        
+        return stress_avg/tindices.size
 
 
 
