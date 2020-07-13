@@ -3,6 +3,7 @@
 
 import numpy as np
 
+
 class ChunkAvg:
     
     def __init__(self, filename):
@@ -167,3 +168,107 @@ class ChunkAvg:
             plt.savefig(save + f"edge_fraction_{current_timestep}.png")
         if show is not False:
             plt.show()
+
+
+
+class ChunkAvgMemSave:
+    
+    def __init__(self, filename):
+        self.read_data(filename)
+        
+    def read_data(self, filename):
+        """Read chunk-averaged file. 
+        
+        Assumptions:
+        The file starts with three comment lines. The first line is some 
+        general information. The second line contains global information. 
+        The third line contains local information. 
+        """
+        print("Reading headers")
+        import subprocess
+
+        self.global_labels = subprocess.getstatusoutput(f"sed '2q;d' {filename}")[1].split()[1:]
+        self.local_labels = subprocess.getstatusoutput(f"sed '3q;d' {filename}")[1].split()[1:]
+        
+
+        first_globals = subprocess.getstatusoutput(f"sed '4q;d' {filename}")[1].split()
+        start_timestep = int(first_globals[0])
+        n_chunks = int(first_globals[1])
+        
+        next_global = 4 + n_chunks + 1
+        second_timestep = int(subprocess.getstatusoutput(f"sed '{next_global}q;d' {filename}")[1].split()[0])
+
+        dt = second_timestep - start_timestep
+
+        last_global = n_chunks + 1
+        last_timestep = int(subprocess.getstatusoutput(f"tail -n {last_global} {filename}| head -n 1")[1].split()[0])
+
+        number_of_timesteps = (last_timestep - start_timestep)//dt + 1
+
+        #allocate arrays:
+        global_array = np.zeros((number_of_timesteps,len(self.global_labels)),dtype=float)
+        local_array = np.zeros((number_of_timesteps,len(self.local_labels),n_chunks),dtype=float)
+
+        
+        with open(filename, "r") as f:
+        
+            line1 = f.readline()
+            line2 = f.readline()
+            line3 = f.readline()
+            
+            
+            timestep_index = -1
+            chunk_nr = 0
+            for line in f.readlines():
+                splitted = line.split()
+                if line[0].isdigit():
+                    # global
+                    chunk_nr = 0
+                    timestep_index += 1
+                    global_array[timestep_index] = np.asarray(splitted, dtype=float)
+                    
+                elif line.startswith(" "):
+                    # local
+                    local_array[timestep_index,:,chunk_nr] = np.asarray(splitted,dtype=float)
+                    chunk_nr +=1
+                    
+                else:
+                    raise TypeError("???")
+            
+        self.global_list = global_array
+        self.local_list = local_array
+        
+    def global_labels(self):
+        """Get an overview of all the global labels
+        """
+        return self.global_labels
+        
+    def local_labels(self):
+        """Get an overview of all the local labels
+        """
+        return self.local_labels
+        
+    def find_global(self, key):
+        """Returns the ...
+        """
+        array = None
+        for i, variable in enumerate(self.global_labels):
+            if variable == key:
+                array = self.global_list[:,i]
+        if array is None:
+            raise KeyError("No category named {} found.".format(key))
+        else:
+            return np.array(array)
+        
+    def find_local(self, key, step=0):
+        """Returns the ...
+        """
+        array = None
+        for i, variable in enumerate(self.local_labels):
+            if variable == key:
+                array = self.local_list[step,i,:]
+        if array is None:
+            raise KeyError("No category named {} found.".format(key))
+        else:
+            return np.array(array)
+ 
