@@ -30,7 +30,7 @@ class ChunkAvg:
             global_list = []
             local_list = []
             
-            for line in f.readlines():
+            for line in f:
                 splitted = line.split()
                 if line[0].isdigit():
                     # global
@@ -80,7 +80,7 @@ class ChunkAvg:
             raise KeyError("No category named {} found.".format(key))
         else:
             return np.array(array)
-            
+
     def find_crack_tip(self, step, threshold, window, ignore_last):
         """Cracktip at time step 
         """
@@ -109,7 +109,34 @@ class ChunkAvg:
             self.cracktip[i] = self.find_crack_tip(i, threshold, window, ignore_last)
         
         return self.cracktip
+    
+    def find_crack_tips_with_defects(self,threshold,window,ignore_last,defects_pos,defects_width, param2):
+        from IPython import embed
+        self.timesteps = self.find_global("Timestep")
+        self.cracktip = np.zeros_like(self.timesteps)
+        xindix = self.find_local("Coord1",step=0)
+        defects_indices = [xindix.size - np.argmin(np.abs(defect-xindix)) + defects_width for defect in defects_pos] + [ignore_last]
+        defects_tips = []
+
+        #print(defects_indices)
+
+        for defect in defects_indices:
+            defect = int(defect)
+            c = self.find_crack_tips(threshold,window,defect)
+            c = np.convolve(c,np.ones((5,))/5)
+            #embed()
+            defects_tips.append(c)
+            
         
+        
+        final = np.zeros_like(defects_tips[0])
+        indice = np.argwhere(defects_tips[1][200:] > defects_pos[0]+param2)[0][0] + 200
+        final[:indice] = defects_tips[0][:indice]
+        final[indice:] = defects_tips[1][indice:]
+        self.cracktip = final
+        return self.cracktip
+
+
     def estimate_crack_speed(self, ignore_first=0, ignore_last=0, length_threshold=0.95):
         """Estimate average crack speed. If the crack propagates through
         the entire sample, the end time is when the crack has reached the
@@ -219,7 +246,7 @@ class ChunkAvgMemSave:
             
             timestep_index = -1
             chunk_nr = 0
-            for line in f.readlines():
+            for line in f:
                 splitted = line.split()
                 if line[0].isdigit():
                     # global

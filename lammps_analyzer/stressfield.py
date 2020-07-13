@@ -11,10 +11,15 @@ class Stressfield():
     """
 
 
-    def __init__(self, filename):
-        self.data = ChunkAvgMemSave(filename)
+    def __init__(self, filename, loc=".",loadfromnpy=False):
+        if loadfromnpy:
+            self.loc = loc
+            self.load_from_npy()
+            print("Loaded from .npy: beware some methods are not implemented for this initialization.")
+        else:
+            self.data = ChunkAvgMemSave(filename)
         self.component_ordering = {"xx":1, "yy":2, "zz":3, "xy":4} #mapping between the index of the tensor array and component
-
+        self.loadfromnpy = loadfromnpy 
     
     def _get_axes(self, step=0):
         coordx = self.data.find_local("Coord1",step=step)
@@ -46,7 +51,7 @@ class Stressfield():
         return stressfield
     
     def create_stressfields(self,component="xx"):
-        mesh_XX,mesh_YY,nbins_X,nbins_Y = self._get_axes(step=0)
+        self.mesh_XX,self.mesh_YY,nbins_X,nbins_Y = self._get_axes(step=0)
 
         self.timesteps = self.data.find_global("Timestep")
         self.stressfields = np.zeros((self.timesteps.size,nbins_X,nbins_Y))
@@ -54,8 +59,93 @@ class Stressfield():
         for t in range(self.timesteps.size):
             self.stressfields[t] = self.create_stressfield(step=t,component=component)
         
-        return mesh_XX,mesh_YY,self.timesteps, self.stressfields
+        self.last_component_created = component
+        return self.mesh_XX,self.mesh_YY,self.timesteps, self.stressfields
 
+    @classmethod
+    def save_parallel(cls,directory,nproc=8):
+        import os
+        import multiprocessing as mp
+
+        dirs = [ f.name for f in os.scandir(folder) if f.is_dir() ]
+
+        def save(direc):
+            print(direc)
+            stress = cls(direc+"/stressfield.data")
+            stress.save_stressfields(loc=direc)
+
+        pool = mp.Pool(nproc)
+        pool.map(save,dirs)
+
+
+
+    def save_stressfields(self,loc="."):
+        print("Saving.",end="")
+        self.create_stressfields(component="xx")
+        np.save(loc+"/stress_xx.npy",self.stressfields)
+        print(".",end="")
+        self.create_stressfields(component="xy")
+        np.save(loc+"/stress_xy.npy",self.stressfields)
+        print(".",end="\n")
+        self.create_stressfields(component="yy")
+        np.save(loc+"/stress_yy.npy",self.stressfields)
+        print(f"Done! Saved to : {loc}/stress_ij.npy")
+    
+    def load_from_npy(self,component="xy"):
+        self.stressfields = np.load(self.loc + f"/stress_{component}.npy")
+        self.last_component_created=component
+
+    
+    def average_window(self,window_time,at_step=0,component="xy"):
+        
+        if not hasattr(self,"last_component_created") and self.loadfromnpy:
+            self.create_stressfields(component=component)
+        elif self.last_component_created != component and not self.loadfromnpy:
+            self.create_stressfields(component=component)
+        elif self.last_component_created != component and self.loadfromnpy:
+            self.load_from_npy(component=component)
+        return np.average(self.stressfields[at_step:at_step+window_time,:,:],axis=0)
+    
+    def average_windows(self,window_time,component="xy"):
+        if not hasattr(self,"last_component_created") and not self.loadfromnpy:
+            self.create_stressfields(component=component)
+        elif self.last_component_created != component and not self.loadfromnpy:
+            self.create_stressfields(component=component)
+        elif self.last_component_created != component and self.loadfromnpy:
+            self.load_from_npy(component=component)
+        
+        t,x,y = self.stressfields.shape
+        self.avg_stressfield = np.zeros((t-window_time,x,y))
+        
+
+        for i in range(t-window_time):
+            self.avg_stressfield[i,:,:] = self.average_window(window_time,at_step=i,component=component)
+        return self.avg_stressfield
+    
+    def animate(self,window_time,component="xy", cm="bwr",save=None,dpi=100):
+        from matplotlib.animation import FuncAnimation
+        
+        frames = self.average_windows(window_time = window_time,component=component)
+
+        vmin = np.min(frames)
+        vmax = np.max(frames)
+        if np.abs(vmin)>np.abs(vmax):
+            vmax = np.abs(vmin)
+        else:
+            vmin = -np.abs(vmax)
+        plt.clf()
+        fig = plt.figure()
+        
+        im = plt.imshow(frames[0].T,aspect="equal",cmap=cm,interpolation="none",vmin=vmin,vmax=vmax)
+
+        def animate_function(i):
+            im.set_array(frames[i].T)
+            return [im]
+
+        anim = FuncAnimation(fig,animate_function,frames=frames.shape[0],interval=100)
+        if save:
+            anim.save(save, dpi=dpi,extra_args=['-vcodec', 'libx264'])
+        plt.show()
 
     def contourplot_stressfield(self,logplot=False,stress=None,show=False,save=False):
         """
