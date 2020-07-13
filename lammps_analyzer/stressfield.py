@@ -120,7 +120,7 @@ class Stressfield():
         Create the average around the cracktip
         """
         
-        cracktip_positions = edge_density.data.find_crack_tips(threshold=0.004,window=1,ignore_last=100)
+        cracktip_positions = edge_density.find_crack_tips(threshold=0.004,window=1,ignore_last=100)
 
         mesh_XX, mesh_YY, timesteps, stressfields = self.create_stressfields(component=component)
 
