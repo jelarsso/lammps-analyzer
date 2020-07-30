@@ -11,15 +11,19 @@ class Stressfield():
     """
 
 
-    def __init__(self, filename, loc=".",loadfromnpy=False):
+    def __init__(self, filename,dt=0.001, loc=".",loadfromnpy=False, xlength = 950, ylength = 121.5, ntimesteps = 50000):
         if loadfromnpy:
             self.loc = loc
+            self.xlength = xlength
+            self.ylength = ylength
+            self.ntimesteps = ntimesteps
             self.load_from_npy()
             print("Loaded from .npy: beware some methods are not implemented for this initialization.")
         else:
             self.data = ChunkAvgMemSave(filename)
         self.component_ordering = {"xx":1, "yy":2, "zz":3, "xy":4} #mapping between the index of the tensor array and component
         self.loadfromnpy = loadfromnpy 
+        self.dt = dt
     
     def _get_axes(self, step=0):
         coordx = self.data.find_local("Coord1",step=step)
@@ -41,33 +45,41 @@ class Stressfield():
 
     def create_stressfield(self, step=0, component="xx"):
         
-        mesh_XX,mesh_YY,nbins_X,nbins_Y = self._get_axes(step=step)
-        component_index = self.component_ordering[component]
+        if not self.loadfromnpy:    
+            mesh_XX,mesh_YY,nbins_X,nbins_Y = self._get_axes(step=step)
+            component_index = self.component_ordering[component]
 
-        stressfield = self.data.find_local(f"c_stressperatom[{str(component_index)}]",step=step)
-        stressfield = np.resize(stressfield,(nbins_X,nbins_Y))
-        
-        self.stress = (mesh_XX,mesh_YY,stressfield,nbins_X,nbins_Y,component,step)
+            stressfield = self.data.find_local(f"c_stressperatom[{str(component_index)}]",step=step)
+            stressfield = np.resize(stressfield,(nbins_X,nbins_Y))
+            
+            self.stress = (mesh_XX,mesh_YY,stressfield,nbins_X,nbins_Y,component,step)
+        elif self.loadfromnpy:
+            mesh_XX,mesh_YY,timesteps,stressfields = self.load_from_npy(component=component)
+            stressfield = stressfields[step]
+            self.stress = (mesh_XX,mesh_YY,stressfield,mesh_XX[:,0].size,mesh_YY[0,:].size,component,step)
         return stressfield
     
     def create_stressfields(self,component="xx"):
-        self.mesh_XX,self.mesh_YY,nbins_X,nbins_Y = self._get_axes(step=0)
+        if not self.loadfromnpy:
+            self.mesh_XX,self.mesh_YY,nbins_X,nbins_Y = self._get_axes(step=0)
 
-        self.timesteps = self.data.find_global("Timestep")
-        self.stressfields = np.zeros((self.timesteps.size,nbins_X,nbins_Y))
+            self.timesteps = self.data.find_global("Timestep")
+            self.stressfields = np.zeros((self.timesteps.size,nbins_X,nbins_Y))
 
-        for t in range(self.timesteps.size):
-            self.stressfields[t] = self.create_stressfield(step=t,component=component)
-        
-        self.last_component_created = component
-        return self.mesh_XX,self.mesh_YY,self.timesteps, self.stressfields
+            for t in range(self.timesteps.size):
+                self.stressfields[t] = self.create_stressfield(step=t,component=component)
+            
+            self.last_component_created = component
+            return self.mesh_XX,self.mesh_YY,self.timesteps, self.stressfields
+        else:
+            return self.load_from_npy(component=component)
 
     @classmethod
     def save_parallel(cls,directory,nproc=8):
         import os
         import multiprocessing as mp
 
-        dirs = [ f.name for f in os.scandir(folder) if f.is_dir() ]
+        dirs = [ f.name for f in os.scandir(directory) if f.is_dir() ]
 
         def save(direc):
             print(direc)
@@ -76,7 +88,6 @@ class Stressfield():
 
         pool = mp.Pool(nproc)
         pool.map(save,dirs)
-
 
 
     def save_stressfields(self,loc="."):
@@ -95,6 +106,12 @@ class Stressfield():
         self.stressfields = np.load(self.loc + f"/stress_{component}.npy")
         self.last_component_created=component
 
+        x = np.linspace(0,self.xlength,self.stressfields.shape[1])
+        y = np.linspace(0,self.ylength,self.stressfields.shape[2])
+        self.mesh_XX,self.mesh_YY = np.meshgrid(x,y)
+        self.timesteps = np.linspace(0,self.ntimesteps,self.stressfields.shape[0])
+        
+        return self.mesh_XX,self.mesh_YY,self.timesteps, self.stressfields
     
     def average_window(self,window_time,at_step=0,component="xy"):
         
@@ -127,19 +144,17 @@ class Stressfield():
         
         frames = self.average_windows(window_time = window_time,component=component)
 
-        vmin = np.min(frames)
-        vmax = np.max(frames)
-        if np.abs(vmin)>np.abs(vmax):
-            vmax = np.abs(vmin)
-        else:
-            vmin = -np.abs(vmax)
+        vmax = np.max(np.abs(frames))
+        vmin = -vmax
+
         plt.clf()
         fig = plt.figure()
-        
-        im = plt.imshow(frames[0].T,aspect="equal",cmap=cm,interpolation="none",vmin=vmin,vmax=vmax)
+        im = plt.imshow(frames[0].T,cmap=cm,vmin=vmin,vmax=vmax,extent=[self.mesh_XX[0,0],self.mesh_XX[0,-1],self.mesh_YY[0,0],self.mesh_YY[-1,0]])#aspect="equal",interpolation="none")
+        ax = plt.gca()
 
         def animate_function(i):
             im.set_array(frames[i].T)
+            ax.set_title(f"$\\sigma_{{{component}}}$ at t = {i/frames.shape[0]*self.timesteps[-1]*self.dt:.2f} ps")
             return [im]
 
         anim = FuncAnimation(fig,animate_function,frames=frames.shape[0],interval=100)
@@ -152,7 +167,7 @@ class Stressfield():
         If you want to save, save should be the string of the path/filename of desired output.
         If stress is None, this plots the stressfield made by the previous create_stressfield call.
         """
-        if stress is None:
+        if stress is None and not self.loadfromnpy:
             assert hasattr(self,"stress"), "create_stressfield must be called first or stress field passed as arg!"
             stress = self.stress
         
@@ -207,7 +222,7 @@ class Stressfield():
             plt.show()
         plt.clf()
     
-    def avg_tip(self,edge_density,window_time=None,window_space=10,component="xy"):
+    def avg_tip(self,edge_density,window_time=None,window_space=10,component="xy",cnkargs=(0.004,1,20)):
         """
         Create the average around the cracktip
         edge_density: needs to be an instance of ChunkAvg for finding the cracktip
@@ -216,7 +231,7 @@ class Stressfield():
         component: which component of the stress tensor to average
         """
         
-        cracktip_positions = edge_density.find_crack_tips(threshold=0.004,window=1,ignore_last=20)
+        cracktip_positions = edge_density.find_crack_tips(cnkargs[0],cnkargs[1],ignore_last=cnkargs[2])
         cracktip_timesteps = edge_density.find_global("Timestep")
         
 
@@ -240,9 +255,3 @@ class Stressfield():
             stress_avg += stressfields[tindex[0]-indexoffset,(xindice-window_space):(xindice+window_space),:]
         
         return stress_avg/tindices.size
-
-
-
-
-
-

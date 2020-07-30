@@ -107,34 +107,25 @@ class ChunkAvg:
         
         for i in range(len(self.timesteps)):
             self.cracktip[i] = self.find_crack_tip(i, threshold, window, ignore_last)
-        
         return self.cracktip
-    
-    def find_crack_tips_with_defects(self,threshold,window,ignore_last,defects_pos,defects_width, param2):
-        from IPython import embed
+
+    def find_crack_tips_with_defect(self,threshold,window,ignore_last,defect_pos,defect_width):
+        from . import average
         self.timesteps = self.find_global("Timestep")
-        self.cracktip = np.zeros_like(self.timesteps)
-        xindix = self.find_local("Coord1",step=0)
-        defects_indices = [xindix.size - np.argmin(np.abs(defect-xindix)) + defects_width for defect in defects_pos] + [ignore_last]
-        defects_tips = []
+        self.cracktip0 = np.zeros_like(self.timesteps)
+        self.cracktip1 = np.zeros_like(self.timesteps)
 
-        #print(defects_indices)
+        self.boxsize = self.find_local("Coord1",step=0)[-1]
 
-        for defect in defects_indices:
-            defect = int(defect)
-            c = self.find_crack_tips(threshold,window,defect)
-            c = np.convolve(c,np.ones((5,))/5)
-            #embed()
-            defects_tips.append(c)
-            
+        for i in range(len(self.timesteps)):
+            self.cracktip0[i] = self.find_crack_tip(i, threshold, window, int(self.boxsize-defect_pos+defect_width)//4)
+            self.cracktip1[i] = self.find_crack_tip(i, threshold, window, ignore_last)
         
-        
-        final = np.zeros_like(defects_tips[0])
-        indice = np.argwhere(defects_tips[1][200:] > defects_pos[0]+param2)[0][0] + 200
-        final[:indice] = defects_tips[0][:indice]
-        final[indice:] = defects_tips[1][indice:]
-        self.cracktip = final
+        self.cracktip = np.where(self.cracktip1>defect_pos+defect_width,self.cracktip1,self.cracktip0)
+        self.cracktip = average(self.cracktip,100)
+        self.timesteps = average(self.timesteps,100)
         return self.cracktip
+
 
 
     def estimate_crack_speed(self, ignore_first=0, ignore_last=0, length_threshold=0.95):
@@ -236,7 +227,7 @@ class ChunkAvgMemSave:
         global_array = np.zeros((number_of_timesteps,len(self.global_labels)),dtype=float)
         local_array = np.zeros((number_of_timesteps,len(self.local_labels),n_chunks),dtype=float)
 
-        
+        print("Reading file: ")
         with open(filename, "r") as f:
         
             line1 = f.readline()
@@ -264,6 +255,7 @@ class ChunkAvgMemSave:
             
         self.global_list = global_array
         self.local_list = local_array
+        print("File read")
         
     def global_labels(self):
         """Get an overview of all the global labels
