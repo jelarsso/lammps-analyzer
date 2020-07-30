@@ -245,20 +245,19 @@ class Stressfield():
 
 
 
+def _save(direc):
+    print(direc)
+    stress = Stressfield(direc+"/stressfield.data")
+    stress.save_stressfields(loc=direc)
+
 def save_parallel(directory,nproc=8):
     import os
     import multiprocessing as mp
 
     dirs = [ f.name for f in os.scandir(directory) if f.is_dir() ]
-    print(dirs)
     
-    def save(direc):
-        print(direc)
-        stress = Stressfield(direc+"/stressfield.data")
-        stress.save_stressfields(loc=direc)
-
     pool = mp.Pool(nproc)
-    pool.map(save,dirs)
+    pool.map(_save,dirs)
 
 
 
