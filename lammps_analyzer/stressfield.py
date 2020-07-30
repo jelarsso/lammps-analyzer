@@ -74,20 +74,7 @@ class Stressfield():
         else:
             return self.load_from_npy(component=component)
 
-    @staticmethod
-    def save_parallel(directory,nproc=8):
-        import os
-        import multiprocessing as mp
 
-        dirs = [ f.name for f in os.scandir(directory) if f.is_dir() ]
-
-        def save(direc):
-            print(direc)
-            stress = Stressfield(direc+"/stressfield.data")
-            stress.save_stressfields(loc=direc)
-
-        pool = mp.Pool(nproc)
-        pool.map(save,dirs)
 
 
     def save_stressfields(self,loc="."):
@@ -255,6 +242,24 @@ class Stressfield():
             stress_avg += stressfields[tindex[0]-indexoffset,(xindice-window_space):(xindice+window_space),:]
         
         return stress_avg/tindices.size
+
+
+
+def save_parallel(directory,nproc=8):
+    import os
+    import multiprocessing as mp
+
+    dirs = [ f.name for f in os.scandir(directory) if f.is_dir() ]
+
+    def save(direc):
+        print(direc)
+        stress = Stressfield(direc+"/stressfield.data")
+        stress.save_stressfields(loc=direc)
+
+    pool = mp.Pool(nproc)
+    pool.map(save,dirs)
+
+
 
 def running_average(array,N):
     i,*dims = array.shape
