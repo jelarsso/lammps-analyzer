@@ -74,8 +74,8 @@ class Stressfield():
         else:
             return self.load_from_npy(component=component)
 
-    @classmethod
-    def save_parallel(cls,directory,nproc=8):
+    @staticmethod
+    def save_parallel(directory,nproc=8):
         import os
         import multiprocessing as mp
 
@@ -83,7 +83,7 @@ class Stressfield():
 
         def save(direc):
             print(direc)
-            stress = cls(direc+"/stressfield.data")
+            stress = Stressfield(direc+"/stressfield.data")
             stress.save_stressfields(loc=direc)
 
         pool = mp.Pool(nproc)
