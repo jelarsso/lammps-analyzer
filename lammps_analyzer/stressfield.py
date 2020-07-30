@@ -250,7 +250,8 @@ def save_parallel(directory,nproc=8):
     import multiprocessing as mp
 
     dirs = [ f.name for f in os.scandir(directory) if f.is_dir() ]
-
+    print(dirs)
+    
     def save(direc):
         print(direc)
         stress = Stressfield(direc+"/stressfield.data")
