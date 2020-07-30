@@ -255,3 +255,40 @@ class Stressfield():
             stress_avg += stressfields[tindex[0]-indexoffset,(xindice-window_space):(xindice+window_space),:]
         
         return stress_avg/tindices.size
+
+def running_average(array,N):
+    i,*dims = array.shape
+
+    avg = np.zeros((i-N,*dims))
+    for indx in range(i-N):
+        avg[indx] = np.average(array[indx:indx+N],axis=0)
+    return avg
+
+
+def alternative_animate(frames,N,title,axis_dims=None, cm="bwr",save=None,dpi=100):
+        from matplotlib.animation import FuncAnimation
+
+        frames = running_average(frames,N)        
+
+        vmax = np.max(np.abs(frames))
+        vmin = -vmax
+
+        if axis_dims is not None:
+            x0,x1,y0,y1 = axis_dims
+        else:
+            x0,x1,y0,y1 = 0,frames.shape[1],0,frames.shape[2]
+
+        plt.clf()
+        fig = plt.figure()
+        im = plt.imshow(frames[0].T,cmap=cm,vmin=vmin,vmax=vmax,extent=[x0,x1,y0,y1])#aspect="equal",interpolation="none")
+        ax = plt.gca()
+
+        def animate_function(i):
+            im.set_array(frames[i].T)
+            ax.set_title(f"{title} frame {i}")
+            return [im]
+
+        anim = FuncAnimation(fig,animate_function,frames=frames.shape[0],interval=100)
+        if save:
+            anim.save(save, dpi=dpi,extra_args=['-vcodec', 'libx264'])
+        plt.show()
